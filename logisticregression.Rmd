@@ -1,0 +1,160 @@
+---
+title: "finalproject5533"
+author: "kd"
+date: "2024-11-21"
+output: html_document
+---
+
+```{r}
+set.seed(5533)
+library(caTools)
+heart_data_keenan <- read.csv("heart_statlog_cleveland_hungary_final.csv")
+heart_data_keenan_unique <- unique(heart_data_keenan)
+heart_data_keenan_unique$sex <- as.numeric(factor(heart_data_keenan_unique$sex))
+heart_data_keenan_unique$chest.pain.type <- as.numeric(factor(heart_data_keenan_unique$chest.pain.type))
+heart_data_keenan_unique$fasting.blood.sugar <- as.numeric(factor(heart_data_keenan_unique$fasting.blood.sugar))
+heart_data_keenan_unique$resting.ecg <- as.numeric(factor(heart_data_keenan_unique$resting.ecg))
+heart_data_keenan_unique$exercise.angina <- as.numeric(factor(heart_data_keenan_unique$exercise.angina))
+heart_data_keenan_unique$ST.slope <- as.numeric(factor(heart_data_keenan_unique$ST.slope))
+
+scale(heart_data_keenan_unique)
+
+split_data_keenan <- sample.split(heart_data_keenan_unique$target, SplitRatio = 0.8)
+heart_train_keenan <- subset(heart_data_keenan_unique, split_data_keenan == TRUE)
+heart_test_keenan <- subset(heart_data_keenan_unique, split_data_keenan == FALSE)
+str(heart_data_keenan_unique)
+```
+
+```{r}
+compute_accuracy <- function(conf_matrix) {
+if (sum(conf_matrix) < 0) {
+stop("Confusion matrix cannot have negative entries")
+} else if (sum(conf_matrix) == 0) {
+return(1)
+} else {
+return(sum(diag(conf_matrix)) / sum(conf_matrix))
+}
+}
+# data frame to store accuracy from various methods
+accuracy <- data.frame(matrix(nrow=0, ncol = 1,
+dimnames = list( c() , c("Accuracy"))))
+```
+
+```{r}
+heart_log_original <- glm(target ~ ., data = heart_train_keenan, family = binomial)
+summary(heart_log_original)
+```
+
+```{r}
+heart_log <- glm(target ~ sex + chest.pain.type + cholesterol + fasting.blood.sugar + max.heart.rate + exercise.angina + oldpeak + ST.slope, data = heart_train_keenan, family = binomial)
+summary(heart_log)
+```
+
+
+```{r}
+predict_log <- predict(heart_log, newdata = heart_test_keenan, type = "response")
+
+cm_log = table(heart_test_keenan$target, predict_log > 0.556)
+print(cm_log)
+```
+
+```{r}
+accuracy["Logistic",] <- compute_accuracy(cm_log)
+print(accuracy)
+```
+
+```{r}
+library(pROC)
+
+# Compute ROC curve
+roc_curve <- roc(heart_test_keenan$target, predict_log)
+
+# Find optimal threshold
+optimal_threshold <- coords(roc_curve, "best", ret = "threshold")
+optimal_threshold
+
+# Plot ROC curve
+plot(roc_curve, main = "ROC Curve")
+```
+
+```{r}
+library(ROCR)
+predict_log_ROC <- predict(heart_log, newdata = heart_train_keenan, type = "response")
+
+roc_pred = prediction(predict_log_ROC, heart_train_keenan$target)
+roc_curve = performance(roc_pred, "tpr", "fpr")
+plot(roc_curve)
+plot(roc_curve, colorize = TRUE, print.cutoffs.at=seq(0,1,0.1),
+text.adj=c(-0.2,0.7))
+```
+
+```{r}
+library(ggplot2)
+AUC <- performance(roc_pred, "auc")@y.values
+print(paste0("AUC = ", round(AUC[[1]],2)) )
+ggplot() +
+aes(x= roc_curve@x.values[[1]], y = roc_curve@y.values[[1]]) +
+labs(title = "ROC Curve", x = roc_curve@x.name[[1]], y =
+roc_curve@y.name[[1]]) +
+geom_area(fill= "dark red") +
+theme(text = element_text(size = 25)) +
+annotate("text", x=0.1, y=0.8, label = paste0("AUC = ",
+round(AUC[[1]],2)), size=10)
+```
+
+
+```{r}
+library(glmnet)
+
+X <- model.matrix(target ~ ., data = heart_data_keenan_unique)[, -1]
+y <- heart_data_keenan_unique$target
+
+set.seed(5533)
+train_index <- sample(1:nrow(X), 0.8 * nrow(X))
+X_train <- X[train_index, ]
+y_train <- y[train_index]
+X_test <- X[-train_index, ]
+y_test <- y[-train_index]
+
+# Lasso Regression (alpha = 1)
+lasso_model <- cv.glmnet(X_train, y_train, alpha = 1, family = "binomial")
+plot(lasso_model)
+best_lambda_lasso <- lasso_model$lambda.min
+cat("Best Lambda for Lasso:", best_lambda_lasso, "\n")
+
+# Ridge Regression (alpha = 0)
+ridge_model <- cv.glmnet(X_train, y_train, alpha = 0, family = "binomial")
+plot(ridge_model)
+best_lambda_ridge <- ridge_model$lambda.min
+cat("Best Lambda for Ridge:", best_lambda_ridge, "\n")
+
+# Predict and Evaluate on Test Data
+lasso_pred <- predict(lasso_model, s = best_lambda_lasso, newx = X_test, type = "response")
+ridge_pred <- predict(ridge_model, s = best_lambda_ridge, newx = X_test, type = "response")
+
+# Convert probabilities to binary predictions
+lasso_class <- ifelse(lasso_pred > 0.556, 1, 0)
+ridge_class <- ifelse(ridge_pred > 0.556, 1, 0)
+
+
+# Confusion Matrices
+table(Predicted = lasso_class, Actual = y_test)
+table(Predicted = ridge_class, Actual = y_test)
+
+print("Accuracy for Lasso: 85.87%, Accuracy for Ridge: 84.24%")
+```
+
+
+```{r}
+#library(caret)
+#numFolds <- trainControl(method = "cv", number = 5)
+
+#temp_heart_train <- heart_train_keenan
+#temp_heart_train$target <- as.factor(temp_heart_train$target)
+
+
+#cross <- train(target ~ ., data = temp_heart_train, method = "bayesglm", trControl = numFolds, tuneGrid = cpGrid)
+#ggplot(cross) + theme(text = element_text(size= 20))
+#best_cp <- cross$bestTune$cp
+#print(best_cp)
+```

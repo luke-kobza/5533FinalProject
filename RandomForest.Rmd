@@ -1,0 +1,32 @@
+---
+title: "RandomForest"
+output: html_document
+date: "2024-11-21"
+---
+
+```{r}
+set.seed(5533)
+
+library(randomForest)
+library(caTools)
+heart_data <- read.csv("/Users/kobza/OneDrive/Desktop/IE 5533/datasets/heart_statlog_cleveland_hungary_final.csv")
+
+heart_data_unique <- unique(heart_data)
+
+heart_data_unique$target <- as.factor(heart_data_unique$target)
+
+split_data <- sample.split(heart_data_unique$target, SplitRatio = 0.8)
+heart_train <- subset(heart_data_unique, split_data == TRUE)
+heart_test <- subset(heart_data_unique, split_data == FALSE)
+
+heart_forest <- randomForest(target ~ ., data=heart_train)
+
+predict_heart_forest <- predict(heart_forest, newdata=heart_test)
+
+conf_matrix_forest <- table(heart_test$target, predict_heart_forest)
+
+acc_rand_forest <- sum(diag(conf_matrix_forest)) / sum(conf_matrix_forest)
+
+print(acc_rand_forest)
+print(conf_matrix_forest)
+```

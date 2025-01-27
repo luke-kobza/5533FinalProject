@@ -1,0 +1,66 @@
+---
+title: "Bucket Tree"
+author: "Jack Farley"
+date: "2024-11-21"
+output: html_document
+---
+
+```{r}
+library(rpart)
+library(ROCR)
+library(caret)
+library(rpart.plot)
+library(caTools)
+
+heart_data = read.csv("heart_statlog_cleveland_hungary_final.csv")
+
+heart_data = unique(heart_data)
+
+
+split = sample.split(heart_data$target, SplitRatio = 0.80) 
+trainData = subset(heart_data, split == TRUE)
+testData = subset(heart_data, split == FALSE)
+tree_model = rpart(target ~ ., data = trainData, method = "class")
+
+rpart.plot(tree_model, type=1)
+
+test = predict(tree_model, testData, type = "prob")
+pred = prediction(test[, 2], testData$target)
+
+roc_curve = performance(pred, "tpr", "fpr")
+plot(roc_curve, lwd = 2, main = "ROC Curve for Heart Disease")
+
+accuracy_list = vector(mode='list', length=100)
+auc_value_list = vector(mode='list', length=100)
+  
+cat("AUC Value: ", sum(auc_value))
+
+for (i in 1:100) {
+split = sample.split(heart_data$target, SplitRatio = 0.80) 
+trainData = subset(heart_data, split == TRUE)
+testData = subset(heart_data, split == FALSE)
+tree_model = rpart(target ~ ., data = trainData, method = "class")
+
+  test_prob = predict(tree_model, testData, type = "prob")
+  test_pred = ifelse(test_prob[, 2] > 0.5, 1, 0) # Threshold at 0.5
+  
+  confusion_matrix = table(Predicted = test_pred, Actual = testData$target)
+  
+  accuracy = sum(diag(confusion_matrix)) / sum(confusion_matrix)
+  accuracy_list[i] = accuracy
+  
+  pred = prediction(test_prob[, 2], testData$target)
+  auc_value = performance(pred, "auc")@y.values[[1]]
+  auc_value_list[i] = auc_value
+  
+}
+
+auc_unlist = unlist(auc_value_list)
+average_auc = mean(auc_unlist)
+accuracy_list = unlist(accuracy)
+average_accuracy = mean(accuracy_list)
+print(confusion_matrix)
+cat("Average AUC over 100 iterations:", average_auc, "\n")
+cat("Average Accuracy over 100 iterations:", average_accuracy, "\n")
+
+```
