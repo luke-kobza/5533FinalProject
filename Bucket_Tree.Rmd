@@ -1,6 +1,6 @@
 ---
 title: "Bucket Tree"
-author: "Jack Farley"
+author: "Luke Kobza"
 date: "2024-11-21"
 output: html_document
 ---
